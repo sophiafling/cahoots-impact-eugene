@@ -4,7 +4,8 @@ This folder contains scripts for cleaning the CAD and MCSLC data and preparing a
 ## Purpose
 The goal of this stage is to:
 - Clean and standardize raw CAD and MCSLC data  
-- Align variables across datasets (call time, call type, response type)  
+- Align variables across datasets (call time, call type, response variables)
+- Standardize call types into shared categories to allow comparison between CAD and MCSLC data  
 - Combine datasets into a single file for analysis  
 - Create time variables and a pre/post CAHOOTS shutdown indicator  
 - Account for differences in how CAHOOTS is recorded before and after 2021  
@@ -38,8 +39,20 @@ This dataset includes:
 
 - CAD data is combined across years and standardized  
 - Timestamps are converted to datetime format and used to create year and month variables  
-- MCSLC data is filtered to Eugene and aligned to match CAD variables  
-- Both datasets are merged into a single combined dataset  
+- MCSLC data is filtered to Eugene and aligned to match CAD variables
+- Call types are recoded into shared categories to ensure consistency across CAD and MCSLC data  
+- Both datasets are merged into a single combined dataset
+
+## Standardizing Call Types
+
+The CAD and MCSLC datasets use different naming conventions for call types (nature in CAD and “reason for dispatch” in MCSLC), which makes direct comparison difficult.
+To address this: 
+- The most frequent call types in each dataset were examined using frequency counts
+- Differences in terminology between CAD and MCSLC were identified
+- A set of broader, shared call categories was created (e.g., Mental Health, Welfare Check, Traffic, Property/Crime, etc.)
+- A custom recoding function was applied to both datasets to map original call types into these shared categories
+This step ensures that call types are comparable across datasets
+
 
 ### Handling CAHOOTS Identification
 
@@ -91,7 +104,8 @@ pip install pandas
 pip install numpy
 
 ## Notes
-- The CAD dataset uses the code **"CAHE"** to represent CAHOOTS in the agency field  
+- The CAD dataset uses the code **"CAHE"** to represent CAHOOTS in the agency field starting from 2021 
 - The 'primeunit' field is used to identify CAHOOTS as the primary responder ('_CAHOT')  
-- Two response variables are used to avoid inconsistencies across years  
+- Two response variables are used to avoid inconsistencies across years
+- Because CAD and MCSLC use different terminology, call types are grouped into broader categories to enable meaningful comparison across datasets  
 - Rows with missing timestamps are retained, but may be excluded in later analysis steps depending on context  
