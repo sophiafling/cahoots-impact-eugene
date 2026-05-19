@@ -1,146 +1,119 @@
-# load libraries
 library(tidyverse)
 library(lubridate)
 
-# load data
-calls <- read_csv("combined_calls_data.csv")
+calls <- read_csv("combined_springfield_data.csv")
 
-# check variables
-glimpse(calls)
-names(calls)
-summary(calls)
-
-# Make sure call_time is read as a datetime
 calls <- calls %>%
   mutate(
     call_time = ymd_hms(call_time),
     date = as.Date(call_time),
-    month_date = floor_date(call_time, "month"),
-    year = year(call_time),
-    month = month(call_time)
-  )
-calls <- calls %>%
+    post = if_else(period == "post", 1, 0),
+    treated = if_else(city == "Eugene", 1, 0)
+  ) %>%
   filter(!is.na(call_time))
 
-# total call volume over time
-monthly_volume <- calls %>%
-  count(month_date)
-
-ggplot(monthly_volume, aes(x = month_date, y = n)) +
-  geom_line(linewidth = 1) +
-  labs(
-    title = "Total Monthly Call Volume",
-    x = "Month",
-    y = "Number of Calls"
-  ) +
-  theme_minimal()
-
-# call volume by response agency over time
-monthly_by_agency <- calls %>%
-  count(month_date, response_agency)
-
-ggplot(monthly_by_agency, aes(x = month_date, y = n, color = response_agency)) +
-  geom_line(linewidth = 1) +
-  labs(
-    title = "Monthly Call Volume by Response Agency",
-    x = "Month",
-    y = "Number of Calls",
-    color = "Response Agency"
-  ) +
-  theme_minimal()
-
-# pre/post call volume by response agency
-
-pre_post_agency <- calls %>%
-  count(period, response_agency)
-
-pre_post_agency
-
-ggplot(pre_post_agency, aes(x = period, y = n, fill = response_agency)) +
-  geom_col(position = "dodge") +
-  labs(
-    title = "Pre/Post Call Volume by Response Agency",
-    x = "Period",
-    y = "Number of Calls",
-    fill = "Response Agency"
-  ) +
-  theme_minimal()
-
-# proportions by response agency
-
-agency_proportions <- calls %>%
-  count(period, response_agency) %>%
-  group_by(period) %>%
-  mutate(prop = n / sum(n)) %>%
-  ungroup()
-
-ggplot(agency_proportions, aes(x = period, y = prop, fill = response_agency)) +
-  geom_col(position = "fill") +
-  labs(
-    title = "Proportion of Calls by Response Agency",
-    x = "Period",
-    y = "Proportion of Calls",
-    fill = "Response Agency"
-  ) +
-  theme_minimal()
-
-# top call types
-
-top_call_types <- calls %>%
-  count(call_type, sort = TRUE) %>%
-  slice_head(n = 10)
-
-top_type_names <- top_call_types$call_type
-
-call_type_counts <- calls %>%
-  filter(call_type %in% top_type_names) %>%
-  count(period, call_type, response_agency)
-
-ggplot(call_type_counts, aes(x = call_type, y = n, fill = response_agency)) +
-  geom_col(position = "dodge") +
-  facet_wrap(~ period) +
-  labs(
-    title = "Top Call Types by Period and Response Agency",
-    x = "Call Type",
-    y = "Number of Calls",
-    fill = "Response Agency"
-  ) +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-# priority breakdown
-
-priority_counts <- calls %>%
-  count(period, priority, response_agency)
-
-ggplot(priority_counts, aes(x = priority, y = n, fill = response_agency)) +
-  geom_col(position = "dodge") +
-  facet_wrap(~ period) +
-  labs(
-    title = "Call Volume by Priority and Response Agency",
-    x = "Priority",
-    y = "Number of Calls",
-    fill = "Response Agency"
-  ) +
-  theme_minimal()
-
-# gap filled by MCSLC
-
-gap_comparison <- calls %>%
-  count(period, response_agency) %>%
-  pivot_wider(
-    names_from = period,
-    values_from = n,
-    values_fill = 0
+weekly_calls <- calls %>%
+  mutate(
+    week_date = floor_date(call_time, "week")
   ) %>%
-  mutate(change = post - pre)
+  group_by(week_date, city, post, treated) %>%
+  summarize(
+    calls = n(),
+    .groups = "drop"
+  )
 
-ggplot(gap_comparison, aes(x = response_agency, y = change, fill = response_agency)) +
-  geom_col() +
+shutdown_date <- as.Date("2025-04-05")
+
+ggplot(weekly_calls,
+       aes(x = week_date,
+           y = calls,
+           color = city)) +
+  geom_line() +
+  geom_vline(xintercept = shutdown_date,
+             linetype = "dashed") +
   labs(
-    title = "Change in Call Volume After CAHOOTS Shutdown",
-    x = "Response Agency",
-    y = "Change in Number of Calls"
+    title = "Difference-in-Differences Visualization",
+    x = "Date",
+    y = "Weekly Call Count"
   ) +
   theme_minimal()
+ggsave(
+  filename = paste0("did_total.png"),
+  plot = p,
+  width = 10,
+  height = 6
+)
+did_model <- lm(calls ~ post * treated, data = daily_calls)
+
+summary(did_model)
+
+pre_calls <- weekly_calls %>%
+  filter(post == 0) %>%
+  mutate(time = row_number())
+
+parallel_model <- lm(calls ~ time * treated, data = pre_calls)
+
+summary(parallel_model)
+
+
+# By call types
+
+
+selected_types <- c(
+  "Welfare Check",
+  "Mental Health",
+  "Conflict/Dispute",
+  "Public/Social Assistance"
+)
+
+for(type in selected_types) {
+  
+  type_calls <- calls %>%
+    filter(call_type == type)
+  
+  weekly_type_calls <- type_calls %>%
+    mutate(
+      week_date = floor_date(call_time, "week")
+    ) %>%
+    group_by(week_date, city, post, treated) %>%
+    summarize(
+      calls = n(),
+      .groups = "drop"
+    )
+  
+  # DiD model
+  did_model <- lm(calls ~ post * treated,
+                  data = weekly_type_calls)
+  
+  cat("CALL TYPE:", type, "\n")
+
+  print(summary(did_model))
+  
+  # graph
+  p <- ggplot(
+    weekly_type_calls,
+    aes(x = week_date,
+        y = calls,
+        color = city)
+  ) +
+    geom_line() +
+    geom_vline(
+      xintercept = shutdown_date,
+      linetype = "dashed"
+    ) +
+    labs(
+      title = paste("DiD:", type),
+      x = "Date",
+      y = "Weekly Call Count"
+    ) +
+    theme_minimal()
+  
+  print(p)
+  ggsave(
+    filename = paste0("did_", gsub("/", "_", type), ".png"),
+    plot = p,
+    width = 10,
+    height = 6
+  )
+}
 
