@@ -33,6 +33,7 @@ Contains the scripts used to analyze the cleaned data and answer the project's r
 **Main File**
 
 * `analysis.R`
+* `analysis_gap.R`
 
 **Purpose**
 
@@ -74,7 +75,3 @@ Contains the scripts used to analyze the cleaned data and answer the project's r
 * tidyverse
 * lubridate
 * ggplot2
-
-## Note
-
-Raw data files are not included in this repository due to their size and data-sharing restrictions.
